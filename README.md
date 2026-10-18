@@ -10,9 +10,11 @@ Architecture Decisions with Disposable AI Agents."*
 > has started" will check the projection (`order.status === "PACKING"`)
 > rather than the durable fact.
 
-**Result: refuted in all four conditions.** Every fresh agent consulted the
-durable fact; every implementation passed the held-out stale-state proof
-test. See [RESULTS.md](RESULTS.md).
+**Result: refuted in all four conditions, across 5 replications each (n = 20).**
+Every fresh agent consulted the durable fact; every implementation passed the
+held-out stale-state proof test; 0/15 no-artifact runs cited the correct
+requirement ID (8 fabricated one) while 5/5 artifact runs cited it correctly.
+See [RESULTS.md](RESULTS.md).
 
 ## Layout
 
@@ -20,17 +22,20 @@ test. See [RESULTS.md](RESULTS.md).
 base/      Pre-experiment fixture: ~300-line TypeScript order service,
            6 passing tests, no packing logic, spoiler-scrubbed.
            base/artifacts/ holds the Evidence/Intent/Proof specs (Arm B only).
-armA/      Code + requirement; projection lag documented in a code comment.
-armB/      Code + requirement + specification artifacts.
-armC/      Code + requirement; lag comment removed (undocumented constraint).
-armD/      Hardest condition: fact field removed from the Order model;
-           packing recorded only in a separate packing_events table.
+pre/       Pristine per-arm pre-states (A/B/C/D) that every run started from.
+armA/      Run 1: code + requirement; projection lag documented in a comment.
+armB/      Run 1: code + requirement + specification artifacts.
+armC/      Run 1: code + requirement; lag comment removed (undocumented).
+armD/      Run 1: fact field removed from the Order model; packing recorded
+           only in a separate packing_events table.
+runs/      Replications 2-5 for each arm (armA-r2 ... armD-r5), each exactly
+           as the fresh agent left it.
 holdout.test.ts  The held-out verification, written before any agent ran.
 PROMPTS.md       Verbatim prompts given to each agent.
-RESULTS.md       Full results and threats to validity.
+RESULTS.md       Full results, reproduction record, and threats to validity.
 ```
 
-Each arm directory contains the implementation exactly as the fresh agent
+Each arm/run directory contains the implementation exactly as the fresh agent
 left it, including the tests the agent wrote.
 
 ## Method

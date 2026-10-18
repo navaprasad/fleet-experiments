@@ -1,43 +1,80 @@
 # Experiment Results — REQ-005 implementation by fresh AI coding agents
 
-Date: 2026-10-17. Runtime: Node v22.23.2, `--experimental-strip-types --test`.
-Agent: fresh instances of a Claude-family coding agent, one per arm, no shared
-context with the experiment designer's session. Prompts recorded verbatim.
-One run per arm.
+Runs: 2026-10-17 (r1) and 2026-10-20 (r2–r5). n = 5 per arm, 20 runs total.
 
-Baseline (all arms): pre-REQ-005 service, 6/6 tests passing, no packing logic,
-no spoiler comments in src/ or tests.
+## Reproduction record
 
-| Arm | Conditions | Implementation produced | Held-out stale-state test |
+- Agent/client: general-purpose coding subagents launched via the Claude Agent
+  SDK inside a Claude Cowork session; each run was a fresh instance with no
+  conversational history from the experiment design or from other runs.
+- Model: claude-fable-5 (Claude family). Host-environment system instructions
+  were present and are not fully reproducible — noted as a limitation. No
+  repository-level AGENTS.md / CLAUDE.md existed in any fixture.
+- Task prompts: PROMPTS.md, verbatim; identical across arms except the
+  controlled variable and directory path.
+- Tool access: file read/write and shell within the fixture directory; no
+  network access required or used.
+- Fixture base state: pre/ directories (6/6 tests passing, no packing logic);
+  each run directory under runs/ preserves the agent's full patch.
+- Runtime: Node v22.23.2, `node --experimental-strip-types --test`.
+- Held-out oracle: holdout.test.ts, written from the requirement before any
+  agent ran; never present in any fixture during a run.
+
+## Conditions (two manipulated dimensions — a condition sweep, not a factorial design)
+
+| Arm | Where knowledge of the projection-lag constraint lives | Where the durable packing fact lives |
+|---|---|---|
+| A | Code comment in the event-ingestion module | Column on the Order row |
+| B | Specification artifacts (Evidence OBS-005/006, Intent, Proof) | Column on the Order row |
+| C | Nowhere — undocumented operational reality | Column on the Order row |
+| D | Nowhere | Separate packing_events table only (requires a new query) |
+
+## Headline result (n = 20)
+
+The hypothesized failure — implementing the packing cutoff against the status
+projection alone — occurred in **0 of 20 runs**. Every run consulted the
+durable fact (all five Arm D runs independently wrote a new store query
+against the packing_events table), every run passed the held-out stale-state
+test, and every run kept the 6 pre-existing tests green. With zero failures
+in 20 trials, a true per-run failure rate above ~14% is unlikely (95%,
+rule of three); the data cannot distinguish rates below that.
+
+Implementation shape varied without affecting correctness: 16/20 checked
+both the fact and the projection ("belt and braces"); 4/20 (A-r3, B-r1,
+B-r3, B-r5) gated on the fact alone.
+
+## Provenance result (n = 20)
+
+The new rule's requirement ID is REQ-005 in the specification. What each run
+cited for the new rule in code comments:
+
+| Arm (n=5) | Correct (REQ-005) | Fabricated (REQ-004) | No citation |
 |---|---|---|---|
-| A | Code + requirement text only; projection lag documented in events.ts comment | `packingStartedAt !== null \|\| status === "PACKING"` | PASS |
-| B | Code + requirement + Evidence/Intent/Proof artifacts (lag in OBS-005/006; proof row "to be defined") | `packingStartedAt !== null` (fact only); proof derived from OBS-005/006 before implementing; proof-map updated; tests drive real ingestion path | PASS |
-| C | Code + requirement only; lag comment REMOVED (undocumented constraint) | `packingStartedAt !== null \|\| status === "PACKING"` | PASS |
-| D | Code + requirement only; `packingStartedAt` removed from Order entirely — fact lives only in a separate `packing_events` table | Added `hasPackingStarted()` store query; checks `status === "PACKING" \|\| hasPackingStarted(id)` | PASS |
+| A (comment-documented) | 0 | 1 | 4 |
+| B (artifacts) | **5** | 0 | 0 |
+| C (undocumented) | 0 | 4 | 1 |
+| D (separate table) | 0 | 3 | 2 |
+| **Total no-artifact (A+C+D)** | **0/15** | 8/15 | 7/15 |
 
-## Headline finding
+The fabrication is systematic, not random: the fixture's pre-existing code
+cites REQ-001..003, and the no-artifact agents that invented an ID chose the
+next number in sequence — REQ-004 — which in the actual specification is the
+API-compatibility requirement. Plausible, confident, wrong. All five Arm B
+runs cited REQ-005 correctly and updated proof-map.md with evidence-derived
+proof cases (every Arm B proof explicitly cited OBS-005/OBS-006 and included
+the projection-lag case).
 
-The hypothesized failure (agent checks only the status projection) did NOT
-reproduce in any arm — including undocumented lag (C) and fact-in-separate-
-table (D). 4/4 implementations consulted the durable fact; 4/4 passed the
-held-out proof test; all arms kept the 6 pre-existing tests green.
+## Interpretation
 
-## Observed differences between arms
+Under these conditions, specification artifacts did not change implementation
+correctness (20/20 regardless). They changed provenance (0/15 correct without
+them; 5/5 with them) and verification articulation (requirement-mapped,
+evidence-derived proof vs. implementation-shaped tests).
 
-1. TRACEABILITY: Arms A and C both labeled the new rule "REQ-004" in code
-   comments — a wrong, invented requirement ID (REQ-004 is the API-compat
-   requirement). Arm D cited no ID. Only Arm B (artifacts) cited REQ-005
-   correctly and updated proof-map.md.
-2. PROOF DERIVATION: Arm B explicitly derived its tests from OBS-005/OBS-006,
-   exercised the real ingestion path (ingestPackingStarted /
-   applyStatusProjection), and added a behavior-preservation test. A/C/D
-   wrote good tests but with fixture-level setup and no requirement mapping.
-3. Arm B was the only arm whose output a reviewer can verify against intent
-   without reading the implementation.
+## Threats to validity
 
-## Caveats
-
-- One model family, one run per arm, ~300-line codebase that fits entirely
-  in the agent's context. Semantically suggestive names (packingStartedAt,
-  packing_events) likely aided discovery. No claim about other models,
-  larger codebases, or cryptically named schemas.
+One model family; a ~300-line fixture that fits entirely in context;
+semantically honest identifiers (packingStartedAt, packing_events) that aid
+discovery; host system instructions not fully controlled; n=5 per arm bounds
+only moderately large failure rates. Agent capabilities shift between model
+releases — findings are dated and should be re-run.
